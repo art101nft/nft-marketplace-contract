@@ -1,0 +1,34 @@
+{
+  "name": "smart-contract-base",
+  "version": "1.0.0",
+  "description": "Smart contract base template.",
+  "main": "index.js",
+  "scripts": {
+    "test": "truffle test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/patrn-me/RMutt-contract.git"
+  },
+  "author": "lza_menace@patrn.me",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/art101nft/smart-contract-base/issues"
+  },
+  "homepage": "https://github.com/art101nft/smart-contract-base",
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.5.0",
+    "@openzeppelin/test-helpers": "^0.5.15",
+    "chai": "^4.3.6",
+    "dotenv": "^10.0.0",
+    "erc721a": "^2.2.0",
+    "eth-gas-reporter": "^0.2.24",
+    "truffle": "^5.4.19",
+    "truffle-hdwallet-provider": "^1.0.17",
+    "truffle-plugin-verify": "^0.5.18",
+    "web3": "^1.6.1"
+  },
+  "engines": {
+    "node": "^12.18.x"
+  }
+}

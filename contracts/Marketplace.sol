@@ -10,12 +10,13 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 contract Marketplace is ReentrancyGuard, Ownable {
     using SafeMath for uint256;
 
+    // Define offers, bids, and collection details
     struct Offer {
         bool isForSale;
         uint256 tokenIndex;
         address seller;
-        uint256 minValue;          // in ether
-        address onlySellTo;     // specify to sell only to a specific person
+        uint256 minValue;
+        address onlySellTo;
     }
 
     struct Bid {
@@ -28,14 +29,18 @@ contract Marketplace is ReentrancyGuard, Ownable {
     struct Collection {
         bool status;
         uint256 royaltyPercent;
-        string metadataJSON;
+        string metadataURL;
     }
 
-    // Nested mappings for each collection's offers, bids, and state
+    // Nested mappings for each collection's offers and bids
     mapping (address => mapping(uint256 => Offer)) public tokenOffers;
     mapping (address => mapping(uint256 => Bid)) public tokenBids;
+
+    // Mapping of collection status and details
     mapping (address => Collection) public collectionState;
-    mapping (address => uint256) public pendingWithdrawals;
+
+    // Mapping of each wallet's pending balances
+    mapping (address => uint256) public pendingBalance;
 
     // Log events
     event Transfer(address indexed collectionAddress, address indexed from, address indexed to, uint256 value);
@@ -50,7 +55,9 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // do stuff...
     }
 
-    // Modifiers
+    /*************************
+    Modifiers
+    **************************/
 
     modifier onlyIfTokenOwner(
         address contractAddress,
@@ -83,10 +90,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
     function updateCollection(
         address contractAddress,
         uint256 royaltyPercent,
-        string memory metadataJSON
+        string memory metadataURL
     ) external onlyIfContractOwner(contractAddress) {
         require(royaltyPercent <= 100, "Cannot exceed 100%");
-        collectionState[contractAddress] = Collection(true, royaltyPercent, metadataJSON);
+        collectionState[contractAddress] = Collection(true, royaltyPercent, metadataURL);
     }
 
     // Allow owners of contracts to remove their collections
@@ -143,7 +150,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         Bid memory existing = tokenBids[contractAddress][tokenIndex];
         require(msg.value > existing.value, "Must bid higher than current bid.");
         // Refund the failing bid
-        pendingWithdrawals[existing.bidder] += existing.value;
+        pendingBalance[existing.bidder] += existing.value;
         tokenBids[contractAddress][tokenIndex] = Bid(true, tokenIndex, msg.sender, msg.value);
         emit TokenBidEntered(contractAddress, tokenIndex, msg.value, msg.sender);
     }
@@ -181,7 +188,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // IERC721(contractAddress).safeTransferFrom
 
         tokenNoLongerForSale(contractAddress, tokenIndex);
-        pendingWithdrawals[seller] += msg.value;
+        pendingBalance[seller] += msg.value;
         emit TokenBought(contractAddress, tokenIndex, msg.value, seller, msg.sender);
 
         // Check for the case where there is a bid from the new owner and refund it.
@@ -190,7 +197,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         if (bid.bidder == msg.sender) {
             // Kill bid and refund value
             // Take cut
-            pendingWithdrawals[msg.sender] += bid.value;
+            pendingBalance[msg.sender] += bid.value;
             tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
         }
     }
@@ -213,7 +220,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 amount = bid.value;
         // Take cut
         tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
-        pendingWithdrawals[seller] += amount;
+        pendingBalance[seller] += amount;
         emit TokenBought(contractAddress, tokenIndex, bid.value, seller, bid.bidder);
     }
 
@@ -222,10 +229,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
     **************************/
 
     function withdraw() external nonReentrant() {
-        uint256 amount = pendingWithdrawals[msg.sender];
+        uint256 amount = pendingBalance[msg.sender];
         // Remember to zero the pending refund before
         // sending to prevent re-entrancy attacks
-        pendingWithdrawals[msg.sender] = 0;
+        pendingBalance[msg.sender] = 0;
         payable(msg.sender).transfer(amount);
     }
 

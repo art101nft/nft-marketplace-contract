@@ -28,6 +28,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
     struct Collection {
         bool status;
         uint256 royaltyPercent;
+        string metadataJSON;
     }
 
     // Nested mappings for each collection's offers, bids, and state
@@ -51,44 +52,93 @@ contract Marketplace is ReentrancyGuard, Ownable {
 
     // Modifiers
 
-    modifier onlyIfSeller(address contractAddress, uint256 tokenIndex) {
+    modifier onlyIfTokenOwner(
+        address contractAddress,
+        uint256 tokenIndex
+    ) {
         require(msg.sender == IERC721(contractAddress).ownerOf(tokenIndex), "You must own the token.");
         _;
     }
 
-    modifier onlyIfBuyer(address contractAddress, uint256 tokenIndex) {
-      address owner = IERC721(contractAddress).ownerOf(tokenIndex);
-      require(msg.sender != owner, "Token owner cannot enter bid to self.");
+    modifier notIfTokenOwner(
+        address contractAddress,
+        uint256 tokenIndex
+    ) {
+        require(msg.sender != IERC721(contractAddress).ownerOf(tokenIndex), "Token owner cannot enter bid to self.");
         _;
     }
 
-    // Administrative
-
-    function addMarketContract(address contractAddress, uint256 royaltyPercent) public onlyOwner {
-        require(royaltyPercent <= 100, "Cannot exceed 100%");
-        collectionState[contractAddress] = Collection(true, royaltyPercent);
+    modifier onlyIfContractOwner(
+        address contractAddress
+    ) {
+        require(msg.sender == Ownable(contractAddress).owner());
+        _;
     }
 
-    // Selling / offering
+    /*************************
+    Administrative
+    **************************/
 
-    function tokenNoLongerForSale(address contractAddress, uint256 tokenIndex) public onlyIfSeller(contractAddress, tokenIndex) nonReentrant() {
+    // Allow owners of contracts to update their collection details
+    function updateCollection(
+        address contractAddress,
+        uint256 royaltyPercent,
+        string memory metadataJSON
+    ) external onlyIfContractOwner(contractAddress) {
+        require(royaltyPercent <= 100, "Cannot exceed 100%");
+        collectionState[contractAddress] = Collection(true, royaltyPercent, metadataJSON);
+    }
+
+    // Allow owners of contracts to remove their collections
+    function withdrawCollection(
+        address contractAddress
+    ) external onlyIfContractOwner(contractAddress) {
+        collectionState[contractAddress] = Collection(false, 0, "");
+    }
+
+    /*************************
+    Selling / offering
+    **************************/
+
+    // Remove token listing
+    function tokenNoLongerForSale(
+        address contractAddress,
+        uint256 tokenIndex
+    ) public onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, msg.sender, 0, address(0x0));
         emit TokenNoLongerForSale(contractAddress, tokenIndex);
     }
 
-    function offerTokenForSale(address contractAddress, uint256 tokenIndex, uint256 minSalePriceInWei) external onlyIfSeller(contractAddress, tokenIndex) nonReentrant() {
+    // List token
+    function offerTokenForSale(
+        address contractAddress,
+        uint256 tokenIndex,
+        uint256 minSalePriceInWei
+    ) external onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         tokenOffers[contractAddress][tokenIndex] = Offer(true, tokenIndex, msg.sender, minSalePriceInWei, address(0x0));
         emit TokenOffered(contractAddress, tokenIndex, minSalePriceInWei, address(0x0));
     }
 
-    function offerTokenForSaleToAddress(address contractAddress, uint256 tokenIndex, uint256 minSalePriceInWei, address toAddress) external onlyIfSeller(contractAddress, tokenIndex) nonReentrant() {
+    // List token for specific address
+    function offerTokenForSaleToAddress(
+        address contractAddress,
+        uint256 tokenIndex,
+        uint256 minSalePriceInWei,
+        address toAddress
+    ) external onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         tokenOffers[contractAddress][tokenIndex] = Offer(true, tokenIndex, msg.sender, minSalePriceInWei, toAddress);
         emit TokenOffered(contractAddress, tokenIndex, minSalePriceInWei, toAddress);
     }
 
-    // Buying / bidding
+    /*************************
+    Buying / bidding
+    **************************/
 
-    function enterBidForToken(address contractAddress, uint256 tokenIndex) external payable onlyIfBuyer(contractAddress, tokenIndex) nonReentrant() {
+    // Open bid on a token
+    function enterBidForToken(
+        address contractAddress,
+        uint256 tokenIndex
+    ) external payable notIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         require(msg.value > 0, "Must bid some amount of Ether.");
         Bid memory existing = tokenBids[contractAddress][tokenIndex];
         require(msg.value > existing.value, "Must bid higher than current bid.");
@@ -98,7 +148,11 @@ contract Marketplace is ReentrancyGuard, Ownable {
         emit TokenBidEntered(contractAddress, tokenIndex, msg.value, msg.sender);
     }
 
-    function withdrawBidForToken(address contractAddress, uint256 tokenIndex) external payable onlyIfBuyer(contractAddress, tokenIndex) nonReentrant() {
+    // Remove an open bid on a token
+    function withdrawBidForToken(
+        address contractAddress,
+        uint256 tokenIndex
+    ) external payable notIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         Bid memory bid = tokenBids[contractAddress][tokenIndex];
         require(msg.sender == bid.bidder, "Only original bidder can withdraw this bid.");
         emit TokenBidWithdrawn(contractAddress, tokenIndex, bid.value, msg.sender);
@@ -108,7 +162,11 @@ contract Marketplace is ReentrancyGuard, Ownable {
         payable(msg.sender).transfer(amount);
     }
 
-    function acceptOfferForToken(address contractAddress, uint256 tokenIndex) external payable onlyIfBuyer(contractAddress, tokenIndex) nonReentrant() {
+    // Buyer accept an offer to buy the token
+    function acceptOfferForToken(
+        address contractAddress,
+        uint256 tokenIndex
+    ) external payable notIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         Offer memory offer = tokenOffers[contractAddress][tokenIndex];
         require(offer.isForSale, "Token must be for sale by owner.");
         if (offer.onlySellTo != address(0x0)) {
@@ -131,12 +189,18 @@ contract Marketplace is ReentrancyGuard, Ownable {
         Bid memory bid = tokenBids[contractAddress][tokenIndex];
         if (bid.bidder == msg.sender) {
             // Kill bid and refund value
+            // Take cut
             pendingWithdrawals[msg.sender] += bid.value;
             tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
         }
     }
 
-    function acceptBidForToken(address contractAddress, uint256 tokenIndex, uint256 minPrice) external payable onlyIfSeller(contractAddress, tokenIndex) nonReentrant() {
+    // Seller accept a bid to sell the token
+    function acceptBidForToken(
+        address contractAddress,
+        uint256 tokenIndex,
+        uint256 minPrice
+    ) external payable onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         Bid memory bid = tokenBids[contractAddress][tokenIndex];
         address seller = msg.sender;
         require(bid.value > 0, "Bid must be greater than 0.");
@@ -152,6 +216,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
         pendingWithdrawals[seller] += amount;
         emit TokenBought(contractAddress, tokenIndex, bid.value, seller, bid.bidder);
     }
+
+    /*************************
+    Fund management
+    **************************/
 
     function withdraw() external nonReentrant() {
         uint256 amount = pendingWithdrawals[msg.sender];

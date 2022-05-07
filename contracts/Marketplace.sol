@@ -83,7 +83,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
     }
 
     /*************************
-    Administrative
+    Administration
     **************************/
 
     // Allow owners of contracts to update their collection details
@@ -92,6 +92,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 royaltyPercent,
         string memory metadataURL
     ) external onlyIfContractOwner(contractAddress) {
+        require(royaltyPercent >= 0, "Must be greater than or equal to 0.");
         require(royaltyPercent <= 100, "Cannot exceed 100%");
         collectionState[contractAddress] = Collection(true, royaltyPercent, metadataURL);
     }
@@ -104,7 +105,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
     }
 
     /*************************
-    Selling / offering
+    Offering
     **************************/
 
     // Remove token listing
@@ -138,7 +139,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
     }
 
     /*************************
-    Buying / bidding
+    Bidding
     **************************/
 
     // Open bid on a token
@@ -169,7 +170,11 @@ contract Marketplace is ReentrancyGuard, Ownable {
         payable(msg.sender).transfer(amount);
     }
 
-    // Buyer accept an offer to buy the token
+    /*************************
+    Sales
+    **************************/
+
+    // Buyer accepts an offer to buy the token
     function acceptOfferForToken(
         address contractAddress,
         uint256 tokenIndex
@@ -188,7 +193,14 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // IERC721(contractAddress).safeTransferFrom
 
         tokenNoLongerForSale(contractAddress, tokenIndex);
-        pendingBalance[seller] += msg.value;
+        // Take cut for the project
+        uint256 hundo = 100;
+        uint256 amount = msg.value;
+        address owner = Owner(contractAddress).owner();
+        uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
+        uint256 sellerAmount = amount.min(collectionRoyalty);
+        pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
+        pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
         emit TokenBought(contractAddress, tokenIndex, msg.value, seller, msg.sender);
 
         // Check for the case where there is a bid from the new owner and refund it.
@@ -196,13 +208,12 @@ contract Marketplace is ReentrancyGuard, Ownable {
         Bid memory bid = tokenBids[contractAddress][tokenIndex];
         if (bid.bidder == msg.sender) {
             // Kill bid and refund value
-            // Take cut
-            pendingBalance[msg.sender] += bid.value;
+            pendingBalance[msg.sender] = pendingBalance[msg.sender].add(bid.value);
             tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
         }
     }
 
-    // Seller accept a bid to sell the token
+    // Seller accepts a bid to sell the token
     function acceptBidForToken(
         address contractAddress,
         uint256 tokenIndex,
@@ -217,10 +228,15 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // IERC721(contractAddress).safeTransferFrom
 
         tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, bid.bidder, 0, address(0x0));
+        // Take cut for the project
+        uint256 hundo = 100;
         uint256 amount = bid.value;
-        // Take cut
+        address owner = Owner(collectionAddress).owner();
+        uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
+        uint256 sellerAmount = amount.min(collectionRoyalty);
         tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
-        pendingBalance[seller] += amount;
+        pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
+        pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
         emit TokenBought(contractAddress, tokenIndex, bid.value, seller, bid.bidder);
     }
 
@@ -230,7 +246,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
 
     function withdraw() external nonReentrant() {
         uint256 amount = pendingBalance[msg.sender];
-        // Remember to zero the pending refund before
+        // Zero the pending refund before
         // sending to prevent re-entrancy attacks
         pendingBalance[msg.sender] = 0;
         payable(msg.sender).transfer(amount);

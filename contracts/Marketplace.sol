@@ -196,9 +196,9 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // Take cut for the project
         uint256 hundo = 100;
         uint256 amount = msg.value;
-        address owner = Owner(contractAddress).owner();
+        address owner = Ownable(contractAddress).owner();
         uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
-        uint256 sellerAmount = amount.min(collectionRoyalty);
+        uint256 sellerAmount = amount.sub(collectionRoyalty);
         pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
         pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
         emit TokenBought(contractAddress, tokenIndex, msg.value, seller, msg.sender);
@@ -231,9 +231,9 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // Take cut for the project
         uint256 hundo = 100;
         uint256 amount = bid.value;
-        address owner = Owner(collectionAddress).owner();
+        address owner = Ownable(contractAddress).owner();
         uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
-        uint256 sellerAmount = amount.min(collectionRoyalty);
+        uint256 sellerAmount = amount.sub(collectionRoyalty);
         tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
         pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
         pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);

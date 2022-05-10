@@ -43,7 +43,6 @@ contract Marketplace is ReentrancyGuard, Ownable {
     mapping (address => uint256) public pendingBalance;
 
     // Log events
-    event Transfer(address indexed collectionAddress, address indexed from, address indexed to, uint256 value);
     event TokenTransfer(address indexed collectionAddress, address indexed from, address indexed to, uint256 tokenIndex);
     event TokenOffered(address indexed collectionAddress, uint256 indexed tokenIndex, uint256 minValue, address indexed toAddress);
     event TokenBidEntered(address indexed collectionAddress, uint256 indexed tokenIndex, uint256 value, address indexed fromAddress);
@@ -200,8 +199,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
 
         address seller = offer.seller;
 
-        emit Transfer(contractAddress, seller, msg.sender, 1);
-        // IERC721(contractAddress).safeTransferFrom
+        // Transfer the token from seller to buyer
+        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not allowed to spend token on seller behalf.");
+        IERC721(contractAddress).safeTransferFrom(seller, msg.sender, tokenIndex);
+        emit TokenTransfer(contractAddress, seller, msg.sender, tokenIndex);
 
         // Remove token offers
         tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, msg.sender, 0, address(0x0));
@@ -239,8 +240,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
         require(bid.value > 0, "Bid must be greater than 0.");
         require(bid.value >= minPrice, "Bid must be greater than minimum price.");
 
-        emit Transfer(contractAddress, seller, bid.bidder, 1);
-        // IERC721(contractAddress).safeTransferFrom
+        // Transfer the token from seller to buyer
+        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not allowed to spend token on seller behalf.");
+        IERC721(contractAddress).safeTransferFrom(seller, bid.bidder, tokenIndex);
+        emit TokenTransfer(contractAddress, seller, bid.bidder, tokenIndex);
 
         tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, bid.bidder, 0, address(0x0));
         // Take cut for the project

@@ -18,6 +18,8 @@ contract('Marketplace', function(accounts) {
     await this.sample.mint(10, {from: accounts[0]});
   });
 
+  return
+
   // updateCollection
 
   it('confirms updateCollection requires contract ownership', async function () {
@@ -575,6 +577,6 @@ contract('Marketplace', function(accounts) {
     await expect(
       await this.mp.pendingBalance(accounts[2])
     ).to.be.bignumber.equal(getPrice(0));
-  })
+  });
 
 });

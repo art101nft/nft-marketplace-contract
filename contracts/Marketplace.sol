@@ -162,7 +162,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         Bid memory existing = tokenBids[contractAddress][tokenIndex];
         require(msg.value > existing.value, "Must bid higher than current bid.");
         // Refund the failing bid
-        pendingBalance[existing.bidder] += existing.value;
+        pendingBalance[existing.bidder] = pendingBalance[existing.bidder].add(existing.value);
         tokenBids[contractAddress][tokenIndex] = Bid(true, tokenIndex, msg.sender, msg.value);
         emit TokenBidEntered(contractAddress, tokenIndex, msg.value, msg.sender);
     }
@@ -203,7 +203,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
         emit Transfer(contractAddress, seller, msg.sender, 1);
         // IERC721(contractAddress).safeTransferFrom
 
-        tokenNoLongerForSale(contractAddress, tokenIndex);
+        // Remove token offers
+        tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, msg.sender, 0, address(0x0));
+        emit TokenNoLongerForSale(contractAddress, tokenIndex);
+
         // Take cut for the project
         uint256 hundo = 100;
         uint256 amount = msg.value;

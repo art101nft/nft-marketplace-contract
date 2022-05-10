@@ -267,7 +267,7 @@ contract('Marketplace', function(accounts) {
     );
   });
 
-  it('confirms withdrawBidForToken cannot require token ownership', async function () {
+  it('confirms withdrawBidForToken cannot allow token ownership', async function () {
     // update collection
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     // create bid
@@ -317,15 +317,64 @@ contract('Marketplace', function(accounts) {
     ).to.be.bignumber.equal(getPrice(0));
   });
 
-});
+  // acceptOfferForToken
 
-// updateCollection
-// disableCollection
-// offerTokenForSale
-// offerTokenForSaleToAddress
-// tokenNoLongerForSale
-// enterBidForToken
-// withdrawBidForToken
-// acceptOfferForToken
-// acceptBidForToken
-// withdraw
+  it('confirms acceptOfferForToken requires active contract', async function () {
+    await expectRevert(
+      this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1]}),
+      'Collection must be enabled on this contract by project owner.'
+    );
+  });
+
+  it('confirms acceptOfferForToken cannot allow token ownership', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
+    await expectRevert(
+      this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[0]}),
+      'Token owner cannot enter bid to self.'
+    );
+  });
+
+  it('confirms acceptOfferForToken requires an active sale/offer', async function () {});
+
+  it('confirms acceptOfferForToken requires enough Ether sent', async function () {});
+
+  it('confirms acceptOfferForToken requires seller ownership of token', async function () {});
+
+  it('confirms acceptOfferForToken halts sale/active offer', async function () {});
+
+  it('confirms acceptOfferForToken transfers the token to buyer', async function () {});
+
+  it('confirms acceptOfferForToken gives contract owner their royalty', async function () {});
+
+  it('confirms acceptOfferForToken gives seller the proper sale amount less royalty', async function () {});
+
+  it('confirms acceptOfferForToken removes existing bid if made by buyer', async function () {});
+
+  it('confirms acceptOfferForToken leaves existing bid if not made by buyer', async function () {});
+
+  // acceptBidForToken
+
+  it('confirms acceptBidForToken requires active contract', async function () {});
+
+  it('confirms acceptBidForToken requires token ownership', async function () {});
+
+  it('confirms acceptBidForToken requires active bid', async function () {});
+
+  it('confirms acceptBidForToken requires bid amount to be greater than seller minimum', async function () {});
+
+  it('confirms acceptBidForToken requires bid amount be greater than 0', async function () {});
+
+  it('confirms acceptBidForToken transfers the token to buyer', async function () {});
+
+  it('confirms acceptBidForToken removes existing bid', async function () {});
+
+  it('confirms acceptBidForToken gives contract owner their royalty', async function () {});
+
+  it('confirms acceptBidForToken gives seller the proper sale amount less royalty', async function () {});
+
+  // withdraw
+
+  it('confirms withdraw sends only allocated funds to msg.sender')
+
+});

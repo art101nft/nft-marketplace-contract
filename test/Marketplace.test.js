@@ -257,6 +257,66 @@ contract('Marketplace', function(accounts) {
     ).to.be.bignumber.equal(getPrice(1));
   });
 
+  // withdrawBidForToken
+
+  it('confirms withdrawBidForToken requires active contract', async function () {
+    // try enterBidForToken when contract not enabled, should fail
+    await expectRevert(
+      this.mp.withdrawBidForToken(this.sample.address, 0, {from: accounts[1]}),
+      'Collection must be enabled on this contract by project owner.'
+    );
+  });
+
+  it('confirms withdrawBidForToken cannot require token ownership', async function () {
+    // update collection
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    // create bid
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
+    // try withdrawBidForToken as token owner, should fail
+    await expectRevert(
+      this.mp.withdrawBidForToken(this.sample.address, 0, {from: accounts[0]}),
+      'Token owner cannot enter bid to self.'
+    );
+  });
+
+  it('confirms withdrawBidForToken should require bid ownership', async function () {
+    // update collection
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    // create bid
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
+    // try withdrawBidForToken as not bid owner, should fail
+    await expectRevert(
+      this.mp.withdrawBidForToken(this.sample.address, 0, {from: accounts[2]}),
+      'Only original bidder can withdraw this bid.'
+    );
+  });
+
+  it('confirms withdrawBidForToken removes bid for token', async function () {
+    // update collection
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    // create bid
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
+    // try revoking offer
+    await expectEvent(
+      await this.mp.withdrawBidForToken(this.sample.address, 0, {from: accounts[1]}),
+      'TokenBidWithdrawn'
+    );
+    // bid should be removed
+    let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
+    await expect(
+      bidDetails.hasBid
+    ).to.equal(false);
+    await expect(
+      bidDetails.tokenIndex
+    ).to.be.bignumber.equal('0');
+    await expect(
+      bidDetails.bidder
+    ).to.equal(nullAddress);
+    await expect(
+      bidDetails.value
+    ).to.be.bignumber.equal(getPrice(0));
+  });
+
 });
 
 // updateCollection

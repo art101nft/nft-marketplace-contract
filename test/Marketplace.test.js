@@ -465,26 +465,116 @@ contract('Marketplace', function(accounts) {
 
   // acceptBidForToken
 
-  it('confirms acceptBidForToken requires active contract', async function () {});
+  it('confirms acceptBidForToken requires active contract', async function () {
+    await expectRevert(
+      this.mp.acceptBidForToken(this.sample.address, 0, getPrice(1), {from: accounts[1]}),
+      'Collection must be enabled on this contract by project owner.'
+    );
+  });
 
-  it('confirms acceptBidForToken requires token ownership', async function () {});
+  it('confirms acceptBidForToken requires token ownership', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.5)});
+    await expectRevert(
+      this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.5), {from: accounts[1]}),
+      'You must own the token.'
+    );
+    await expectRevert(
+      this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.5), {from: accounts[2]}),
+      'You must own the token.'
+    );
+  });
 
-  it('confirms acceptBidForToken requires active bid', async function () {});
+  it('confirms acceptBidForToken requires active bid', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await expectRevert(
+      this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.5), {from: accounts[0]}),
+      'Bid must be active.'
+    );
+  });
 
-  it('confirms acceptBidForToken requires bid amount to be greater than seller minimum', async function () {});
-
-  it('confirms acceptBidForToken requires bid amount be greater than 0', async function () {});
+  it('confirms acceptBidForToken requires bid amount to be greater than seller minimum', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.5)});
+    await expectRevert(
+      this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.501), {from: accounts[0]}),
+      'Bid must be greater than minimum price.'
+    );
+  });
 
   it('confirms acceptBidForToken transfers the token to buyer', async function () {});
 
-  it('confirms acceptBidForToken removes existing bid', async function () {});
+  it('confirms acceptBidForToken removes existing bid', async function () {
+    await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.8)});
+    await this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.75), {from: accounts[0]});
+    let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
+    await expect(
+      bidDetails.hasBid
+    ).to.equal(false);
+    await expect(
+      bidDetails.tokenIndex
+    ).to.be.bignumber.equal('0');
+    await expect(
+      bidDetails.bidder
+    ).to.equal(nullAddress);
+    await expect(
+      bidDetails.value
+    ).to.be.bignumber.equal(getPrice(0));
+  });
 
-  it('confirms acceptBidForToken gives contract owner their royalty', async function () {});
+  it('confirms acceptBidForToken gives contract owner their royalty', async function () {
+    await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.mint(10, {from: accounts[2]}); // mint 10 more as new address
+    await this.mp.enterBidForToken(this.sample.address, 10, {from: accounts[1], value: getPrice(1)});
+    await this.mp.acceptBidForToken(this.sample.address, 10, getPrice(1), {from: accounts[2]});
+    let ownerBalance = await this.mp.pendingBalance(accounts[0]);
+    // confirm 10% royalty for collection owner reflects in balances
+    // amount / (100 / royalty)
+    let royaltyAmount = 1 / (100 / 10);
+    await expect(
+      ownerBalance
+    ).to.be.bignumber.equal(getPrice(royaltyAmount));
+  });
 
-  it('confirms acceptBidForToken gives seller the proper sale amount less royalty', async function () {});
+  it('confirms acceptBidForToken gives seller the proper sale amount less royalty', async function () {
+    await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.mint(10, {from: accounts[2]}); // mint 10 more as new address
+    await this.mp.enterBidForToken(this.sample.address, 10, {from: accounts[1], value: getPrice(1)});
+    await this.mp.acceptBidForToken(this.sample.address, 10, getPrice(1), {from: accounts[2]});
+    let sellerBalance = await this.mp.pendingBalance(accounts[2]);
+    // confirm 10% royalty for collection owner reflects in balances
+    // amount / (100 / royalty)
+    let royaltyAmount = 1 / (100 / 10);
+    await expect(
+      sellerBalance
+    ).to.be.bignumber.equal(getPrice(1 - royaltyAmount));
+  });
 
   // withdraw
 
-  it('confirms withdraw sends only allocated funds to msg.sender')
+  it('confirms withdraw sends only allocated funds to msg.sender', async function () {
+    await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.5)});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[2], value: getPrice(.525)});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[3], value: getPrice(.55)});
+    // bids beaten should be returned to accounts 1 and 2
+    await expect(
+      await this.mp.pendingBalance(accounts[1])
+    ).to.be.bignumber.equal(getPrice(.5));
+    await expect(
+      await this.mp.pendingBalance(accounts[2])
+    ).to.be.bignumber.equal(getPrice(.525));
+    // withdraw from those accounts
+    await this.mp.withdraw({from: accounts[1]});
+    await this.mp.withdraw({from: accounts[2]});
+    // balances should be 0
+    await expect(
+      await this.mp.pendingBalance(accounts[1])
+    ).to.be.bignumber.equal(getPrice(0));
+    await expect(
+      await this.mp.pendingBalance(accounts[2])
+    ).to.be.bignumber.equal(getPrice(0));
+  })
 
 });

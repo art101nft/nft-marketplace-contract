@@ -124,6 +124,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 tokenIndex,
         uint256 minSalePriceInWei
     ) external collectionMustBeEnabled(contractAddress) onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
+        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
         tokenOffers[contractAddress][tokenIndex] = Offer(true, tokenIndex, msg.sender, minSalePriceInWei, address(0x0));
         emit TokenOffered(contractAddress, tokenIndex, minSalePriceInWei, address(0x0));
     }
@@ -135,6 +136,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 minSalePriceInWei,
         address toAddress
     ) external collectionMustBeEnabled(contractAddress) onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
+        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
         tokenOffers[contractAddress][tokenIndex] = Offer(true, tokenIndex, msg.sender, minSalePriceInWei, toAddress);
         emit TokenOffered(contractAddress, tokenIndex, minSalePriceInWei, toAddress);
     }
@@ -200,7 +202,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         address seller = offer.seller;
 
         // Transfer the token from seller to buyer
-        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not allowed to spend token on seller behalf.");
+        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
         IERC721(contractAddress).safeTransferFrom(seller, msg.sender, tokenIndex);
         emit TokenTransfer(contractAddress, seller, msg.sender, tokenIndex);
 
@@ -241,7 +243,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         require(bid.value >= minPrice, "Bid must be greater than minimum price.");
 
         // Transfer the token from seller to buyer
-        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not allowed to spend token on seller behalf.");
+        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
         IERC721(contractAddress).safeTransferFrom(seller, bid.bidder, tokenIndex);
         emit TokenTransfer(contractAddress, seller, bid.bidder, tokenIndex);
 

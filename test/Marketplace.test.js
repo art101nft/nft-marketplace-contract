@@ -119,7 +119,15 @@ contract('Marketplace', function(accounts) {
       this.mp.offerTokenForSale(this.sample.address, 1, getPrice(5), {from: accounts[0]}),
       'Collection must be enabled on this contract by project owner.'
     );
-  })
+  });
+
+  it('offerTokenForSale requires marketplace contract token approval', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await expectRevert(
+      this.mp.offerTokenForSale(this.sample.address, 0, getPrice(5), {from: accounts[0]}),
+      'Marketplace not approved to spend token on seller behalf'
+    );
+  });
 
   it('offerTokenForSale requires token ownership', async function () {
     // update collection
@@ -134,6 +142,7 @@ contract('Marketplace', function(accounts) {
   it('offerTokenForSale puts new offer for token', async function () {
     // update collection
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     // try offering token as owner, should succeed
     await expectEvent(
       await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(5), {from: accounts[0]}),
@@ -172,6 +181,7 @@ contract('Marketplace', function(accounts) {
     // update collection
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     // offer token
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(5), {from: accounts[0]});
     // try offerTokenForSale as wrong owner, should fail
     await expectRevert(
@@ -184,6 +194,7 @@ contract('Marketplace', function(accounts) {
     // update collection
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     // offer token
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(5), {from: accounts[0]});
     // try revoking offer
     await expectEvent(
@@ -330,10 +341,22 @@ contract('Marketplace', function(accounts) {
 
   it('acceptOfferForToken cannot allow token ownership', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await expectRevert(
       this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[0]}),
       'Token owner cannot enter bid to self.'
+    );
+  });
+
+  it('acceptOfferForToken requires marketplace contract token approval', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
+    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
+    await this.sample.approve(nullAddress, 0, {from: accounts[0]});
+    await expectRevert(
+      this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)}),
+      'Marketplace not approved to spend token on seller behalf'
     );
   });
 
@@ -347,6 +370,7 @@ contract('Marketplace', function(accounts) {
 
   it('acceptOfferForToken requires enough Ether sent', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await expectRevert(
       this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.9999)}),
@@ -360,6 +384,7 @@ contract('Marketplace', function(accounts) {
 
   it('acceptOfferForToken requires seller ownership of token', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.sample.safeTransferFrom(accounts[0], accounts[5], 0);
     await expectRevert(
@@ -370,8 +395,8 @@ contract('Marketplace', function(accounts) {
 
   it('acceptOfferForToken halts sale/active offer', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
-    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
+    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     let offerDetail = await this.mp.tokenOffers(this.sample.address, 0);
     await expect(
@@ -396,8 +421,8 @@ contract('Marketplace', function(accounts) {
     await expect(
       await this.sample.ownerOf(0)
     ).to.equal(accounts[0]);
-    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
+    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     await expect(
       await this.sample.ownerOf(0)
@@ -407,8 +432,8 @@ contract('Marketplace', function(accounts) {
   it('acceptOfferForToken gives contract owner their royalty', async function () {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.sample.mint(10, {from: accounts[1]}); // mint 10 more as new address
-    await this.mp.offerTokenForSale(this.sample.address, 10, getPrice(1), {from: accounts[1]});
     await this.sample.approve(this.mp.address, 10, {from: accounts[1]});
+    await this.mp.offerTokenForSale(this.sample.address, 10, getPrice(1), {from: accounts[1]});
     await this.mp.acceptOfferForToken(this.sample.address, 10, {from: accounts[2], value: getPrice(1)});
     let ownerBalance = await this.mp.pendingBalance(accounts[0]);
     // confirm 10% royalty for collection owner reflects in balances
@@ -422,8 +447,8 @@ contract('Marketplace', function(accounts) {
   it('acceptOfferForToken gives seller the proper sale amount less royalty', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     await this.sample.mint(10, {from: accounts[1]}); // mint 10 more as new address
-    await this.mp.offerTokenForSale(this.sample.address, 10, getPrice(1), {from: accounts[1]});
     await this.sample.approve(this.mp.address, 10, {from: accounts[1]});
+    await this.mp.offerTokenForSale(this.sample.address, 10, getPrice(1), {from: accounts[1]});
     await this.mp.acceptOfferForToken(this.sample.address, 10, {from: accounts[2], value: getPrice(1)});
     let sellerBalance = await this.mp.pendingBalance(accounts[1]);
     // confirm 5% royalty for collection owner reflects in balances
@@ -437,8 +462,8 @@ contract('Marketplace', function(accounts) {
   it('acceptOfferForToken removes existing bid if made by buyer', async function () {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.8)});
-    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
+    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
     await expect(
@@ -461,8 +486,8 @@ contract('Marketplace', function(accounts) {
   it('acceptOfferForToken leaves existing bid if not made by buyer', async function () {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[2], value: getPrice(.8)});
-    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
+    await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
     await expect(
@@ -491,6 +516,7 @@ contract('Marketplace', function(accounts) {
   it('acceptBidForToken requires token ownership', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.5)});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await expectRevert(
       this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.5), {from: accounts[1]}),
       'You must own the token.'
@@ -498,6 +524,15 @@ contract('Marketplace', function(accounts) {
     await expectRevert(
       this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.5), {from: accounts[2]}),
       'You must own the token.'
+    );
+  });
+
+  it('acceptBidForToken requires marketplace contract token approval', async function () {
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.5)});
+    await expectRevert(
+      this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.5), {from: accounts[0]}),
+      'Marketplace not approved to spend token on seller behalf'
     );
   });
 
@@ -512,6 +547,7 @@ contract('Marketplace', function(accounts) {
   it('acceptBidForToken requires bid amount to be greater than seller minimum', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.5)});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await expectRevert(
       this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.501), {from: accounts[0]}),
       'Bid must be greater than minimum price.'

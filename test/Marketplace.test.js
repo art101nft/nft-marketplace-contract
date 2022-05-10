@@ -207,7 +207,54 @@ contract('Marketplace', function(accounts) {
     await expect(
       tokenDetails.onlySellTo
     ).to.equal(nullAddress);
+  });
 
+  // enterBidForToken
+
+  it('confirms enterBidForToken requires active contract', async function () {
+    // try enterBidForToken when contract not enabled, should fail
+    await expectRevert(
+      this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1]}),
+      'Collection must be enabled on this contract by project owner.'
+    );
+  });
+
+  it('confirms enterBidForToken should not require token ownership', async function () {
+    // update collection
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    // try enterBidForToken as token owner, should fail
+    await expectRevert(
+      this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[0]}),
+      'Token owner cannot enter bid to self.'
+    );
+  });
+
+  it('confirms enterBidForToken creates bid for token', async function () {
+    // update collection
+    await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
+    // should be no bid
+    await expect(
+      (await this.mp.tokenBids(this.sample.address, 0)).hasBid
+    ).to.equal(false);
+    // try revoking offer
+    await expectEvent(
+      await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)}),
+      'TokenBidEntered'
+    );
+    // bid should be in
+    let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
+    await expect(
+      bidDetails.hasBid
+    ).to.equal(true);
+    await expect(
+      bidDetails.tokenIndex
+    ).to.be.bignumber.equal('0');
+    await expect(
+      bidDetails.bidder
+    ).to.equal(accounts[1]);
+    await expect(
+      bidDetails.value
+    ).to.be.bignumber.equal(getPrice(1));
   });
 
 });

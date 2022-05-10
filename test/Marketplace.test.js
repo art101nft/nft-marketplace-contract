@@ -18,8 +18,6 @@ contract('Marketplace', function(accounts) {
     await this.sample.mint(10, {from: accounts[0]});
   });
 
-  return
-
   // updateCollection
 
   it('confirms updateCollection requires contract ownership', async function () {
@@ -373,6 +371,7 @@ contract('Marketplace', function(accounts) {
   it('confirms acceptOfferForToken halts sale/active offer', async function () {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     let offerDetail = await this.mp.tokenOffers(this.sample.address, 0);
     await expect(
@@ -398,6 +397,7 @@ contract('Marketplace', function(accounts) {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.sample.mint(10, {from: accounts[1]}); // mint 10 more as new address
     await this.mp.offerTokenForSale(this.sample.address, 10, getPrice(1), {from: accounts[1]});
+    await this.sample.approve(this.mp.address, 10, {from: accounts[1]});
     await this.mp.acceptOfferForToken(this.sample.address, 10, {from: accounts[2], value: getPrice(1)});
     let ownerBalance = await this.mp.pendingBalance(accounts[0]);
     // confirm 10% royalty for collection owner reflects in balances
@@ -412,6 +412,7 @@ contract('Marketplace', function(accounts) {
     await this.mp.updateCollection(this.sample.address, 5, "ipfs://mynewhash", {from: accounts[0]});
     await this.sample.mint(10, {from: accounts[1]}); // mint 10 more as new address
     await this.mp.offerTokenForSale(this.sample.address, 10, getPrice(1), {from: accounts[1]});
+    await this.sample.approve(this.mp.address, 10, {from: accounts[1]});
     await this.mp.acceptOfferForToken(this.sample.address, 10, {from: accounts[2], value: getPrice(1)});
     let sellerBalance = await this.mp.pendingBalance(accounts[1]);
     // confirm 5% royalty for collection owner reflects in balances
@@ -426,6 +427,7 @@ contract('Marketplace', function(accounts) {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.8)});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
     await expect(
@@ -449,6 +451,7 @@ contract('Marketplace', function(accounts) {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[2], value: getPrice(.8)});
     await this.mp.offerTokenForSale(this.sample.address, 0, getPrice(1), {from: accounts[0]});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.acceptOfferForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(1)});
     let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
     await expect(
@@ -509,6 +512,7 @@ contract('Marketplace', function(accounts) {
   it('confirms acceptBidForToken removes existing bid', async function () {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.mp.enterBidForToken(this.sample.address, 0, {from: accounts[1], value: getPrice(.8)});
+    await this.sample.approve(this.mp.address, 0, {from: accounts[0]});
     await this.mp.acceptBidForToken(this.sample.address, 0, getPrice(.75), {from: accounts[0]});
     let bidDetails = await this.mp.tokenBids(this.sample.address, 0);
     await expect(
@@ -529,6 +533,7 @@ contract('Marketplace', function(accounts) {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.sample.mint(10, {from: accounts[2]}); // mint 10 more as new address
     await this.mp.enterBidForToken(this.sample.address, 10, {from: accounts[1], value: getPrice(1)});
+    await this.sample.approve(this.mp.address, 10, {from: accounts[2]});
     await this.mp.acceptBidForToken(this.sample.address, 10, getPrice(1), {from: accounts[2]});
     let ownerBalance = await this.mp.pendingBalance(accounts[0]);
     // confirm 10% royalty for collection owner reflects in balances
@@ -543,6 +548,7 @@ contract('Marketplace', function(accounts) {
     await this.mp.updateCollection(this.sample.address, 10, "ipfs://mynewhash", {from: accounts[0]});
     await this.sample.mint(10, {from: accounts[2]}); // mint 10 more as new address
     await this.mp.enterBidForToken(this.sample.address, 10, {from: accounts[1], value: getPrice(1)});
+    await this.sample.approve(this.mp.address, 10, {from: accounts[2]});
     await this.mp.acceptBidForToken(this.sample.address, 10, getPrice(1), {from: accounts[2]});
     let sellerBalance = await this.mp.pendingBalance(accounts[2]);
     // confirm 10% royalty for collection owner reflects in balances

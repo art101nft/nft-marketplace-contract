@@ -15,7 +15,6 @@ module.exports = {
       timeoutBlocks: 10,
       skipDryRun: true,
       production: false,
-      gas: 2500000,
       gasPrice: 2000000000 // 2 gwei
     },
     mainnet: {

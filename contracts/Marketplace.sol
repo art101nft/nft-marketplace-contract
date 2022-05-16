@@ -137,7 +137,6 @@ contract Marketplace is ReentrancyGuard, Ownable {
     ) external collectionMustBeEnabled(contractAddress) onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         if (collectionState[contractAddress].erc1155) {
             require(IERC1155(contractAddress).isApprovedForAll(msg.sender, address(this)), "Marketplace not approved to spend token on seller behalf.");
-
         } else {
             require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
         }

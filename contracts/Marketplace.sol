@@ -1,4 +1,35 @@
 // SPDX-License-Identifier: MIT
+//
+// Marketplace from the Art101 team (https://art101.io/devs.html).
+// Developed by @lza_menace
+//
+// This is our take on a decentralized NFT marketplace. Big thanks to those
+// who came before us; CryptoPunks, CryptoPhunks, etc. Their marketplaces and
+// tools were highly influential and provided the initial contract code and
+// reference implementations.
+//
+// This implementation supports many collections/contracts to be added to it.
+// The only requirements are that the contract implements `Ownable` and ERC-721
+// or ERC-1155 token standards. Contract owners must submit their collection.
+// This contract is free to use, but contract owners can enforce their own royalties.
+//
+// Teams may use this contract with an integrated frontend of their choice or
+// fork this code and launch one of their own. We hope it becomes useful to the
+// NFT and web3 scene and furthers the push for decentralization. Much of the
+// infrastructure has been consolidated to the largest players/organizations
+// which have normalized censorship, favoritism, wash trading, skimming/capital
+// extraction, and supporting and enabling scams and predatory behavior. We
+// believe in the need for NFT projects and teams to leverage their own
+// (or community) smart contract based exchange methods and open source trading
+// contracts.
+//
+// A frontend implementation can be found at https://gallery.art101.io. We
+// intend to release a more general purpose template which teams can fork for
+// their own projects.
+//
+// If anyone is so inclined and interested, please join us:
+// @art101nft - @j_winter_m - @cartyisme - @lza_menace
+
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";

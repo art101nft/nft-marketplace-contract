@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -28,6 +29,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
 
     struct Collection {
         bool status;
+        bool erc1155;
         uint256 royaltyPercent;
         string metadataURL;
     }
@@ -97,12 +99,13 @@ contract Marketplace is ReentrancyGuard, Ownable {
     // Allow owners of contracts to update their collection details
     function updateCollection(
         address contractAddress,
+        bool erc1155,
         uint256 royaltyPercent,
         string memory metadataURL
     ) external onlyIfContractOwner(contractAddress) {
         require(royaltyPercent >= 0, "Must be greater than or equal to 0.");
         require(royaltyPercent <= 100, "Cannot exceed 100%");
-        collectionState[contractAddress] = Collection(true, royaltyPercent, metadataURL);
+        collectionState[contractAddress] = Collection(true, erc1155, royaltyPercent, metadataURL);
         emit CollectionUpdated(contractAddress);
     }
 
@@ -110,7 +113,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
     function disableCollection(
         address contractAddress
     ) external collectionMustBeEnabled(contractAddress) onlyIfContractOwner(contractAddress) {
-        collectionState[contractAddress] = Collection(false, 0, "");
+        collectionState[contractAddress] = Collection(false, false 0, "");
         emit CollectionDisabled(contractAddress);
     }
 
@@ -124,7 +127,12 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 tokenIndex,
         uint256 minSalePriceInWei
     ) external collectionMustBeEnabled(contractAddress) onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
-        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
+        if (collectionState[contractAddress].erc1155) {
+            require(IERC1155(contractAddress).isApprovedForAll(msg.sender, address(this)), "Marketplace not approved to spend token on seller behalf.");
+
+        } else {
+            require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
+        }
         tokenOffers[contractAddress][tokenIndex] = Offer(true, tokenIndex, msg.sender, minSalePriceInWei, address(0x0));
         emit TokenOffered(contractAddress, tokenIndex, minSalePriceInWei, address(0x0));
     }
@@ -136,7 +144,11 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 minSalePriceInWei,
         address toAddress
     ) external collectionMustBeEnabled(contractAddress) onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
-        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
+        if (collectionState[contractAddress].erc1155) {
+            require(IERC1155(contractAddress).isApprovedForAll(msg.sender, address(this)), "Marketplace not approved to spend token on seller behalf.");
+        } else {
+            require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
+        }
         tokenOffers[contractAddress][tokenIndex] = Offer(true, tokenIndex, msg.sender, minSalePriceInWei, toAddress);
         emit TokenOffered(contractAddress, tokenIndex, minSalePriceInWei, toAddress);
     }
@@ -192,42 +204,54 @@ contract Marketplace is ReentrancyGuard, Ownable {
         uint256 tokenIndex
     ) external payable collectionMustBeEnabled(contractAddress) notIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         Offer memory offer = tokenOffers[contractAddress][tokenIndex];
+        address seller = offer.seller;
+        address buyer = msg.sender;
+        uint256 amount = msg.value;
+
+        // Checks
+        require(amount >= offer.minValue, "Not enough Ether sent.");
         require(offer.isForSale, "Token must be for sale by owner.");
         if (offer.onlySellTo != address(0x0)) {
-            require(msg.sender == offer.onlySellTo, "Offer applies to other address.");
+            require(buyer == offer.onlySellTo, "Offer applies to other address.");
         }
-        require(msg.value >= offer.minValue, "Not enough Ether sent.");
-        require(offer.seller == IERC721(contractAddress).ownerOf(tokenIndex), "Seller is no longer the owner, cannot accept offer.");
 
-        address seller = offer.seller;
-
-        // Transfer the token from seller to buyer
-        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
-        IERC721(contractAddress).safeTransferFrom(seller, msg.sender, tokenIndex);
-        emit TokenTransfer(contractAddress, seller, msg.sender, tokenIndex);
+        // Confirm ownership then transfer the token from seller to buyer
+        if (collectionState[contractAddress].erc1155) {
+            require(IERC1155(contractAddress).balanceOf(seller, tokenIndex) > 0, "Seller is no longer the owner, cannot accept offer.");
+            require(IERC1155(contractAddress).isApprovedForAll(seller, address(this)), "Marketplace not approved to spend token on seller behalf.");
+            IERC1155(contractAddress).safeTransferFrom(seller, buyer, tokenIndex, 1, 0x0);
+        } else {
+            require(seller == IERC721(contractAddress).ownerOf(tokenIndex), "Seller is no longer the owner, cannot accept offer.");
+            require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
+            IERC721(contractAddress).safeTransferFrom(seller, buyer, tokenIndex);
+        }
 
         // Remove token offers
-        tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, msg.sender, 0, address(0x0));
-        emit TokenNoLongerForSale(contractAddress, tokenIndex);
+        tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, buyer, 0, address(0x0));
 
-        // Take cut for the project
-        uint256 hundo = 100;
-        uint256 amount = msg.value;
-        address owner = Ownable(contractAddress).owner();
-        uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
-        uint256 sellerAmount = amount.sub(collectionRoyalty);
-        pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
-        pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
-        emit TokenBought(contractAddress, tokenIndex, msg.value, seller, msg.sender);
+        // Take cut for the project if royalties
+        if (collectionState[contractAddress].royaltyPercent > 0) {
+            uint256 hundo = 100;
+            address owner = Ownable(contractAddress).owner();
+            uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
+            uint256 sellerAmount = amount.sub(collectionRoyalty);
+            pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
+            pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
+        }
 
         // Check for the case where there is a bid from the new owner and refund it.
         // Any other bid can stay in place.
         Bid memory bid = tokenBids[contractAddress][tokenIndex];
-        if (bid.bidder == msg.sender) {
+        if (bid.bidder == buyer) {
             // Kill bid and refund value
-            pendingBalance[msg.sender] = pendingBalance[msg.sender].add(bid.value);
+            pendingBalance[buyer] = pendingBalance[buyer].add(bid.value);
             tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
         }
+
+        // Emit token events
+        emit TokenTransfer(contractAddress, seller, buyer, tokenIndex);
+        emit TokenNoLongerForSale(contractAddress, tokenIndex);
+        emit TokenBought(contractAddress, tokenIndex, amount, seller, msg.sender);
     }
 
     // Seller accepts a bid to sell the token
@@ -238,26 +262,43 @@ contract Marketplace is ReentrancyGuard, Ownable {
     ) external payable collectionMustBeEnabled(contractAddress) onlyIfTokenOwner(contractAddress, tokenIndex) nonReentrant() {
         Bid memory bid = tokenBids[contractAddress][tokenIndex];
         address seller = msg.sender;
-        require(bid.hasBid == true, "Bid must be active.");
-        require(bid.value > 0, "Bid must be greater than 0.");
-        require(bid.value >= minPrice, "Bid must be greater than minimum price.");
-
-        // Transfer the token from seller to buyer
-        require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
-        IERC721(contractAddress).safeTransferFrom(seller, bid.bidder, tokenIndex);
-        emit TokenTransfer(contractAddress, seller, bid.bidder, tokenIndex);
-
-        tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, bid.bidder, 0, address(0x0));
-        // Take cut for the project
-        uint256 hundo = 100;
+        address buyer = bid.bidder;
         uint256 amount = bid.value;
-        address owner = Ownable(contractAddress).owner();
-        uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
-        uint256 sellerAmount = amount.sub(collectionRoyalty);
-        tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
-        pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
-        pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
-        emit TokenBought(contractAddress, tokenIndex, bid.value, seller, bid.bidder);
+
+        // Checks
+        require(bid.hasBid == true, "Bid must be active.");
+        require(amount > 0, "Bid must be greater than 0.");
+        require(amount >= minPrice, "Bid must be greater than minimum price.");
+
+        // Confirm ownership then transfer the token from seller to buyer
+        if (collectionState[contractAddress].erc1155) {
+            require(IERC1155(contractAddress).balanceOf(seller, tokenIndex) > 0, "Seller is no longer the owner, cannot accept offer.");
+            require(IERC1155(contractAddress).isApprovedForAll(seller, address(this)), "Marketplace not approved to spend token on seller behalf.");
+            IERC1155(contractAddress).safeTransferFrom(seller, buyer, tokenIndex, 1, 0x0);
+        } else {
+            require(offer.seller == IERC721(contractAddress).ownerOf(tokenIndex), "Seller is no longer the owner, cannot accept offer.");
+            require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
+            IERC721(contractAddress).safeTransferFrom(seller, buyer, tokenIndex);
+        }
+
+        // Remove token offers
+        tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, buyer, 0, address(0x0));
+
+        // Take cut for the project if royalties
+        if (collectionState[contractAddress].royaltyPercent > 0) {
+            uint256 hundo = 100;
+            address owner = Ownable(contractAddress).owner();
+            uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
+            uint256 sellerAmount = amount.sub(collectionRoyalty);
+            tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
+            pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
+            pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
+        }
+
+        // Emit token events
+        emit TokenTransfer(contractAddress, seller, buyer, tokenIndex);
+        emit TokenNoLongerForSale(contractAddress, tokenIndex);
+        emit TokenBought(contractAddress, tokenIndex, amount, seller, buyer);
     }
 
     /*************************

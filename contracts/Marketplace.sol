@@ -251,7 +251,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // Emit token events
         emit TokenTransfer(contractAddress, seller, buyer, tokenIndex);
         emit TokenNoLongerForSale(contractAddress, tokenIndex);
-        emit TokenBought(contractAddress, tokenIndex, amount, seller, msg.sender);
+        emit TokenBought(contractAddress, tokenIndex, amount, seller, buyer);
     }
 
     // Seller accepts a bid to sell the token

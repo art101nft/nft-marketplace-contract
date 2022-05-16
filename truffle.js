@@ -24,8 +24,8 @@ module.exports = {
       timeoutBlocks: 30,
       skipDryRun: false,
       production: true,
-      gas: 2500000,
-      gasPrice: 150000000000 // 150 gwei
+      gas: 3750000,
+      gasPrice: 50000000000 // 50 gwei
     },
   },
   mocha: {

@@ -23,7 +23,7 @@
     "dotenv": "^10.0.0",
     "erc721a": "^2.2.0",
     "eth-gas-reporter": "^0.2.24",
-    "truffle": "^5.4.19",
+    "truffle": "^5.5.13",
     "truffle-hdwallet-provider": "^1.0.17",
     "truffle-plugin-verify": "^0.5.18",
     "web3": "^1.6.1"

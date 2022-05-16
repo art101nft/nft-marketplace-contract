@@ -1,5 +1,5 @@
 const Marketplace = artifacts.require("Marketplace");
-const SampleProject = artifacts.require("SampleProject");
+const SampleProject721 = artifacts.require("SampleProject721");
 const { BN, expectEvent, expectRevert } = require('@openzeppelin/test-helpers');
 const { expect } = require('chai');
 
@@ -14,7 +14,7 @@ contract('Marketplace', function(accounts) {
 
   beforeEach(async function () {
     this.mp = await Marketplace.new({from: accounts[0]});
-    this.sample = await SampleProject.new({from: accounts[0]});
+    this.sample = await SampleProject721.new({from: accounts[0]});
     await this.sample.mint(10, {from: accounts[0]});
   });
 

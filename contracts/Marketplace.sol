@@ -113,7 +113,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
     function disableCollection(
         address contractAddress
     ) external collectionMustBeEnabled(contractAddress) onlyIfContractOwner(contractAddress) {
-        collectionState[contractAddress] = Collection(false, false 0, "");
+        collectionState[contractAddress] = Collection(false, false, 0, "");
         emit CollectionDisabled(contractAddress);
     }
 
@@ -219,7 +219,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         if (collectionState[contractAddress].erc1155) {
             require(IERC1155(contractAddress).balanceOf(seller, tokenIndex) > 0, "Seller is no longer the owner, cannot accept offer.");
             require(IERC1155(contractAddress).isApprovedForAll(seller, address(this)), "Marketplace not approved to spend token on seller behalf.");
-            IERC1155(contractAddress).safeTransferFrom(seller, buyer, tokenIndex, 1, 0x0);
+            IERC1155(contractAddress).safeTransferFrom(seller, buyer, tokenIndex, 1, bytes(""));
         } else {
             require(seller == IERC721(contractAddress).ownerOf(tokenIndex), "Seller is no longer the owner, cannot accept offer.");
             require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
@@ -230,14 +230,7 @@ contract Marketplace is ReentrancyGuard, Ownable {
         tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, buyer, 0, address(0x0));
 
         // Take cut for the project if royalties
-        if (collectionState[contractAddress].royaltyPercent > 0) {
-            uint256 hundo = 100;
-            address owner = Ownable(contractAddress).owner();
-            uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
-            uint256 sellerAmount = amount.sub(collectionRoyalty);
-            pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
-            pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
-        }
+        collectRoyalties(contractAddress, seller, amount);
 
         // Check for the case where there is a bid from the new owner and refund it.
         // Any other bid can stay in place.
@@ -274,9 +267,9 @@ contract Marketplace is ReentrancyGuard, Ownable {
         if (collectionState[contractAddress].erc1155) {
             require(IERC1155(contractAddress).balanceOf(seller, tokenIndex) > 0, "Seller is no longer the owner, cannot accept offer.");
             require(IERC1155(contractAddress).isApprovedForAll(seller, address(this)), "Marketplace not approved to spend token on seller behalf.");
-            IERC1155(contractAddress).safeTransferFrom(seller, buyer, tokenIndex, 1, 0x0);
+            IERC1155(contractAddress).safeTransferFrom(seller, buyer, tokenIndex, 1, bytes(""));
         } else {
-            require(offer.seller == IERC721(contractAddress).ownerOf(tokenIndex), "Seller is no longer the owner, cannot accept offer.");
+            require(seller == IERC721(contractAddress).ownerOf(tokenIndex), "Seller is no longer the owner, cannot accept offer.");
             require(IERC721(contractAddress).getApproved(tokenIndex) == address(this), "Marketplace not approved to spend token on seller behalf.");
             IERC721(contractAddress).safeTransferFrom(seller, buyer, tokenIndex);
         }
@@ -285,15 +278,10 @@ contract Marketplace is ReentrancyGuard, Ownable {
         tokenOffers[contractAddress][tokenIndex] = Offer(false, tokenIndex, buyer, 0, address(0x0));
 
         // Take cut for the project if royalties
-        if (collectionState[contractAddress].royaltyPercent > 0) {
-            uint256 hundo = 100;
-            address owner = Ownable(contractAddress).owner();
-            uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
-            uint256 sellerAmount = amount.sub(collectionRoyalty);
-            tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
-            pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
-            pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
-        }
+        collectRoyalties(contractAddress, seller, amount);
+
+        // Clear bid
+        tokenBids[contractAddress][tokenIndex] = Bid(false, tokenIndex, address(0x0), 0);
 
         // Emit token events
         emit TokenTransfer(contractAddress, seller, buyer, tokenIndex);
@@ -311,6 +299,25 @@ contract Marketplace is ReentrancyGuard, Ownable {
         // sending to prevent re-entrancy attacks
         pendingBalance[msg.sender] = 0;
         payable(msg.sender).transfer(amount);
+    }
+
+    /*************************
+    Internal
+    **************************/
+
+    // Take cut for the project if royalties
+    function collectRoyalties(address contractAddress, address seller, uint256 amount) private {
+        // ownerRoyalty = amount / (100 / royalty)
+        // sellerReceives = amount - ownerRoyalty
+        // amount = ownerRoyalty + sellerReceives
+        if (collectionState[contractAddress].royaltyPercent > 0) {
+            uint256 hundo = 100;
+            address owner = Ownable(contractAddress).owner();
+            uint256 collectionRoyalty = amount.div(hundo.div(collectionState[contractAddress].royaltyPercent));
+            uint256 sellerAmount = amount.sub(collectionRoyalty);
+            pendingBalance[seller] = pendingBalance[seller].add(sellerAmount);
+            pendingBalance[owner] = pendingBalance[owner].add(collectionRoyalty);
+        }
     }
 
 }
